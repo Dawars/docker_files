@@ -1,0 +1,78 @@
+ARG CUDA_IMAGE_TAG=11.8.0
+ARG OS_VERSION=22.04
+ARG USER_ID=1000
+# Define base image.
+
+ARG PYTHON_VERSION=3.10
+#ARG PYTORCH_VERSION=2.2.2
+#ARG TORCHVISION_VERSION=0.17.2
+ARG PYTORCH_VERSION=1.13.1
+ARG TORCHVISION_VERSION=0.14.1
+ARG CUDA=11.8
+
+FROM dawars/sdfstudio:torch${PYTORCH_VERSION}-cu11.8
+ARG CUDA_IMAGE_TAG
+ARG OS_VERSION
+ARG USER_ID
+
+# Variables used at build time.
+## CUDA architectures, required by Colmap and tiny-cuda-nn.
+## NOTE: All commonly used GPU architectures are included and supported here. To speedup the image build process remove all architectures but the one of your explicit GPU. Find details here: https://developer.nvidia.com/cuda-gpus (8.6 translates to 86 in the line below) or in the docs.
+ARG CUDA_ARCHITECTURES=86;80;75
+
+## CUDA Home, required to find CUDA in some packages.
+ENV CUDA_HOME="/usr/local/cuda"
+
+ENV PATH=${CUDA_HOME}/bin:/home/${USER_NAME}/.local/bin:${PATH}
+ENV LD_LIBRARY_PATH=${CUDA_HOME}/lib64:${LD_LIBRARY_PATH}
+ENV LIBRARY_PATH=${CUDA_HOME}/lib64/stubs:${LIBRARY_PATH}
+
+USER root
+# apt install by root user
+RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+    build-essential \
+    curl \
+    git \
+    libegl1-mesa-dev \
+    libgl1-mesa-dev \
+    libgles2-mesa-dev \
+    libglib2.0-0 \
+    libsm6 \
+    libxext6 \
+    libxrender1 \
+    python-is-python3 \
+    python3.10-dev \
+    python3-pip \
+    wget \
+    && rm -rf /var/lib/apt/lists/*
+
+ #RUN pip install git+https://github.com/KAIR-BAIR/nerfacc.git@v0.5.2
+RUN pip install nerfacc==0.5.2 -f https://nerfacc-bucket.s3.us-west-2.amazonaws.com/whl/torch-1.13.0_cu117.html  # cache
+
+RUN pip list
+
+# threestudio
+RUN pip install omegaconf==2.3.0 jaxtyping typeguard diffusers\<0.20 transformers==4.28.1 accelerate \
+    imageio>=2.28.0 imageio[ffmpeg] git+https://github.com/NVlabs/nvdiffrast.git libigl xatlas trimesh[easy] networkx pysdf \
+     gradio==4.11.0 git+https://github.com/ashawkey/envlight.git xformers bitsandbytes==0.38.1 sentencepiece safetensors \
+     huggingface_hub taming-transformers-rom1504 git+https://github.com/openai/CLIP.git controlnet_aux torch\<2.0
+
+RUN pip list
+
+# Switch to new uer and workdir.
+USER root
+RUN chmod -R a+w /programs
+RUN chown -R  ${USER_ID} /programs
+USER ${USER_ID}
+WORKDIR /programs
+#RUN chmod -R a+w /programs
+# Add local user binary folder to PATH variable.
+ENV PATH="${PATH}:/programs/.local/bin"
+#SHELL ["/bin/bash", "-c"]
+
+# Change working directory
+WORKDIR /workspace
+
+# Install nerfstudio cli auto completion and enter shell if no command was provided.
+# CMD ns-install-cli --mode install && /bin/bash
+

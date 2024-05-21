@@ -1,0 +1,33 @@
+
+version: '3'
+services:
+  dev:
+    image: dawars/3dbuildings:torch2.3.0-cu11.8
+    volumes:
+     - "/home/dawars/projects:/projects"
+     - "/mnt/hdd/datasets:/mnt/hdd/datasets"
+     - "/home/dawars/.torch:/root/.torch"
+
+    environment:
+     - "PYTHONPATH=/projects/buildings_challenge"
+  jupyter:  # start by docker-compose up jupyter
+    image: dawars/3dbuildings:torch2.3.0-cu11.8
+    volumes:
+     - "/home/dawars/projects:/projects"
+     - "/mnt/hdd/datasets:/mnt/hdd/datasets"
+     - "/home/dawars/.torch:/root/.torch"
+    ports:
+     - 8888:8888
+    environment:
+     - "PYTHONPATH=/projects/3dbuildings_challenge"
+    working_dir: /projects
+    command: jupyter notebook --ip 0.0.0.0 --no-browser --allow-root
+  tb:
+      image: dawars/3dbuildings:torch2.3.0-cu11.8
+      volumes:
+       - "/home/dawars/projects:/projects"
+       - "/mnt/hdd/datasets:/mnt/hdd/datasets"
+       - "/home/dawars/.torch:/root/.torch"
+      ports:
+       - 6006:6006
+      command: tensorboard --logdir=/mnt/hdd/model_saves/

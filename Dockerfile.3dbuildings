@@ -1,0 +1,53 @@
+ARG CUDA_IMAGE_TAG=11.8.0
+ARG USER_ID=1000
+
+
+ARG PYTHON_VERSION=3.10
+#ARG PYTORCH_VERSION=2.2.2
+#ARG TORCHVISION_VERSION=0.17.2
+#ARG CUDA=11.8
+ARG PYTORCH_VERSION=1.13.1
+ARG TORCHVISION_VERSION=0.14.1
+ARG CUDA=11.7
+
+# Define base image.
+FROM dawars/pytorch:torch${PYTORCH_VERSION}-cu${CUDA}
+ARG CUDA_IMAGE_TAG
+ARG USER_ID
+
+ARG PYTHON_VERSION
+ARG PYTORCH_VERSION
+ARG TORCHVISION_VERSION
+ARG CUDA
+
+ARG CUDA_ARCHITECTURES=61;86;80;75
+
+USER root
+
+RUN conda install ninja h5py pyyaml -c anaconda -y && \
+    conda install sharedarray tensorboard tensorboardx yapf addict einops scipy plyfile termcolor timm -c conda-forge -y && \
+    conda install pytorch-cluster pytorch-scatter pytorch-sparse -c pyg -y && \
+    conda clean -ya && \
+    rm -rf /root/.cache/
+RUN export CUDA_SHORT=$(echo "$CUDA" | sed "s/[.]//") && \
+    pip install torch-geometric open3d spconv-cu$CUDA_SHORT # spconv (SparseUNet) refer https://github.com/traveller59/spconv
+
+#RUN echo "$(echo $input_string | cut -d= -f2 | tr ';' ' ' | sed -E 's/([0-9]{1})([0-9]{1})/ \1.\2/g' | sed -E 's/^ //' | tr -s ' ')"
+RUN TORCH_CUDA_ARCH_LIST="7.5 8.0 8.6" pip install git+https://github.com/Pointcept/Pointcept.git#subdirectory=libs/pointops
+
+RUN pip install easydict pythreejs gin-config torchmetrics torchsummary Pillow  opencv-python-headless && \
+    conda install -c conda-forge meshplot jupyterlab scikit-image scikit-learn && \
+    conda clean -ya && \
+    rm -rf /root/.cache/
+
+
+RUN chmod -R a+w /programs
+RUN chown -R  ${USER_ID} /programs
+USER ${USER_ID}
+WORKDIR /programs
+#RUN chmod -R a+w /programs
+# Add local user binary folder to PATH variable.
+ENV PATH="${PATH}:/programs/.local/bin"
+
+# Change working directory
+WORKDIR /workspace
