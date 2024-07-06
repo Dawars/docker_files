@@ -26,20 +26,21 @@ USER root
 
 RUN conda install ninja h5py pyyaml -c anaconda -y && \
     conda install sharedarray tensorboard tensorboardx yapf addict einops scipy plyfile termcolor timm -c conda-forge -y && \
-    conda install pytorch-cluster pytorch-scatter pytorch-sparse -c pyg -y && \
+    conda install pytorch-cluster pytorch-scatter pytorch-sparse pyg -c pyg -y && \
     conda clean -ya && \
     rm -rf /root/.cache/
 RUN export CUDA_SHORT=$(echo "$CUDA" | sed "s/[.]//") && \
-    pip install torch-geometric open3d spconv-cu$CUDA_SHORT # spconv (SparseUNet) refer https://github.com/traveller59/spconv
+    pip install open3d spconv-cu$CUDA_SHORT # spconv (SparseUNet) refer https://github.com/traveller59/spconv
 
 #RUN echo "$(echo $input_string | cut -d= -f2 | tr ';' ' ' | sed -E 's/([0-9]{1})([0-9]{1})/ \1.\2/g' | sed -E 's/^ //' | tr -s ' ')"
-RUN TORCH_CUDA_ARCH_LIST="7.5 8.0 8.6" pip install git+https://github.com/Pointcept/Pointcept.git#subdirectory=libs/pointops
+RUN TORCH_CUDA_ARCH_LIST="6.1 8.0 8.6 7.5" pip install git+https://github.com/Pointcept/Pointcept.git#subdirectory=libs/pointops
 
 RUN pip install easydict pythreejs gin-config torchmetrics torchsummary Pillow  opencv-python-headless && \
     conda install -c conda-forge meshplot jupyterlab scikit-image scikit-learn && \
     conda clean -ya && \
     rm -rf /root/.cache/
 
+RUN pip install flash_attn
 
 RUN chmod -R a+w /programs
 RUN chown -R  ${USER_ID} /programs

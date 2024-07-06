@@ -1,0 +1,42 @@
+# https://github.com/gmberton/VPR-methods-evaluation/
+ARG CUDA_IMAGE_TAG=11.8.0
+ARG USER_ID=1000
+
+
+ARG PYTHON_VERSION=3.10
+#ARG PYTORCH_VERSION=2.2.2
+#ARG TORCHVISION_VERSION=0.17.2
+#ARG CUDA=11.8
+ARG PYTORCH_VERSION=1.13.1
+ARG TORCHVISION_VERSION=0.14.1
+ARG CUDA=11.7
+
+# Define base image.
+FROM dawars/pytorch:torch${PYTORCH_VERSION}-cu${CUDA}
+ARG CUDA_IMAGE_TAG
+ARG USER_ID
+
+ARG PYTHON_VERSION
+ARG PYTORCH_VERSION
+ARG TORCHVISION_VERSION
+ARG CUDA
+
+ARG CUDA_ARCHITECTURES=61;86;80;75
+
+USER root
+
+
+# vpr deps
+RUN pip install flash_attn prettytable faiss-gpu==1.7.2 git+https://github.com/openai/CLIP.git@a9b1bf5920416aaeaec965c25dd9e8f98c864f16 && \
+    conda install -c xformers xformers
+
+RUN chmod -R a+w /programs
+RUN chown -R  ${USER_ID} /programs
+USER ${USER_ID}
+WORKDIR /programs
+#RUN chmod -R a+w /programs
+# Add local user binary folder to PATH variable.
+ENV PATH="${PATH}:/programs/.local/bin"
+
+# Change working directory
+WORKDIR /workspace

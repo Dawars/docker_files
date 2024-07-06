@@ -16,14 +16,14 @@ cuda_conda=(   "11.8"    )
 for i in "${!pytorch[@]}"; do
   IMAGE_TAG="torch${pytorch[i]}-cu${cuda_conda[i]}"
   echo "$IMAGE_TAG"
-  docker build --progress=plain -t dawars/colmap:"${IMAGE_TAG}" \
+  docker build --progress=plain -t dawars/gluefactory:"${IMAGE_TAG}" \
   --build-arg CUDA_IMAGE_TAG="${cuda_docker[i]}" \
   --build-arg PYTORCH_VERSION="${pytorch[i]}" \
   --build-arg TORCHVISION_VERSION="${torchvision[i]}" \
   --build-arg CUDA="${cuda_conda[i]}" \
-  -f Dockerfile.colmap .
+  -f Dockerfile.gluefactory .
 
-  docker push dawars/colmap:"${IMAGE_TAG}"
+  docker push dawars/gluefactory:"${IMAGE_TAG}"
 
 
 done

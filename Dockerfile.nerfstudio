@@ -1,0 +1,62 @@
+ARG CUDA_IMAGE_TAG=11.8.0
+ARG OS_VERSION=22.04
+ARG USER_ID=1000
+
+
+ARG PYTHON_VERSION=3.10
+ARG PYTORCH_VERSION=1.13.1
+ARG TORCHVISION_VERSION=0.14.1
+ARG CUDA=11.7
+
+ARG CUDA_ARCHITECTURES=61;86;80;75
+#
+# Docker builder stage.
+#
+FROM dawars/colmap:torch${PYTORCH_VERSION}-cu${CUDA}
+
+# Prevent stop building ubuntu at time zone selection.
+ENV DEBIAN_FRONTEND=noninteractive
+
+USER root
+WORKDIR /programs
+
+ARG CUDA_ARCHITECTURES=61;86;80;75
+
+# Add glog path to LD_LIBRARY_PATH.
+ENV LD_LIBRARY_PATH="${LD_LIBRARY_PATH}:/usr/local/lib"
+
+
+# Switch to new user and workdir.
+USER ${USER_UID}
+WORKDIR /workspace
+
+# Add local user binary folder to PATH variable.
+ENV PATH="${PATH}:/workspace/.local/bin"
+
+# Upgrade pip and install packages.
+RUN python -m pip install --no-cache-dir --upgrade pip setuptools\<70 pathtools promise pybind11 omegaconf
+
+# Install tiny-cuda-nn (we need to set the target architectures as environment variable first).
+ENV TCNN_CUDA_ARCHITECTURES=${CUDA_ARCHITECTURES}
+#RUN pip install -v git+https://github.com/NVlabs/tiny-cuda-nn.git@v1.6#subdirectory=bindings/torch
+ENV LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/local/cuda/lib64:/usr/local/cuda/extras/CUPTI/lib64
+ENV PATH=$PATH:$CUDA_HOME/bin
+
+RUN git clone --recurse-submodules -j8 -b v1.6  https://github.com/NVlabs/tiny-cuda-nn.git \
+        && cd ./tiny-cuda-nn/bindings/torch \
+        && pip install -v . \
+        && cd ../../../ && rm -r tiny-cuda-nn
+
+RUN pip install nerfstudio && pip uninstall -y nerfstudio
+
+# Install pixel perfect sfm.
+#RUN git clone --recursive https://github.com/cvg/pixel-perfect-sfm.git && \
+#    cd pixel-perfect-sfm && \
+#    git reset --hard 40f7c1339328b2a0c7cf71f76623fb848e0c0357 && \
+#    git clean -df && \
+#    python3.10 -m pip install --no-cache-dir -e . && \
+#    cd ..
+
+USER ${USER_ID}
+# Change working directory
+WORKDIR /workspace
