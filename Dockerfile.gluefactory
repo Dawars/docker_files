@@ -25,13 +25,14 @@ ARG CUDA_ARCHITECTURES=61;86;80;75
 
 USER root
 
-
-# vpr deps
-RUN pip install git+https://github.com/ducha-aiki/glue-factory.git \
+# gluefactory deps
+RUN pip install -U albumentations && \
+    pip install git+https://github.com/dawars/glue-factory.git@dedode \
         git+https://github.com/PoseLib/PoseLib.git \
         git+https://github.com/iago-suarez/pytlsd.git@v0.0.5 \
         git+https://github.com/cvg/DeepLSD.git \
-        git+https://github.com/rpautrat/homography_est.git
+        git+https://github.com/rpautrat/homography_est.git && \
+    pip uninstall -y glue-factory
 
 RUN chmod -R a+w /programs
 RUN chown -R  ${USER_ID} /programs

@@ -45,7 +45,8 @@ RUN apt-get update && \
         qtbase5-dev \
         libqt5opengl5-dev \
         libcgal-dev \
-        libsuitesparse-dev
+        libsuitesparse-dev \
+        libhdf5-dev
 
 ARG CUDA_ARCHITECTURES=61;86;80;75
 
@@ -87,23 +88,23 @@ RUN cp -r /colmap_installed/* /usr/local/ && \
     cd colmap/pycolmap && \
     pip install "pybind11[global]" && \
     python -m pip wheel --config-settings=cmake.define.CMAKE_PREFIX_PATH="/opt/conda/lib;/opt/conda/include;/opt/conda/" \
-     -vv . -w .
-#     && \
-#    python -m pip install pycolmap-3.10.dev0-cp310-cp310-linux_x86_64.whl  # install for pixsfm build dependency
+     -vv . -w . \
+     --config-settings=cmake.define.CMAKE_CUDA_ARCHITECTURES=${CUDA_ARCHITECTURES} \
+     --config-settings=cmake.define.CUDA_ENABLED=ON \
+    && \
+    python -m pip install pycolmap-3.10.dev0-cp310-cp310-linux_x86_64.whl  # install for pixsfm build dependency
 
-# \
- #    --config-settings=cmake.define.CMAKE_CUDA_ARCHITECTURES=${CUDA_ARCHITECTURES} \
- #    --config-settings=cmake.define.CUDA_ENABLED=ON
-
-#pixsfm doesn't support scipy-builder for cmake args
-#RUN git clone --recursive https://github.com/dawars/pixel-perfect-sfm.git -b colmap-3.9 && \
-#  cd pixel-perfect-sfm && mkdir build && \
-#    python -m pip wheel -vvv . -w .
+RUN git clone --recursive https://github.com/dawars/pixel-perfect-sfm.git -b colmap-3.9  && \
+  cd pixel-perfect-sfm && \
+    git checkout 1fab153355305e8fcd1166609e7052565cc7be18 && \
+    python -m pip wheel -v . -w . --config-settings=cmake.define.CMAKE_PREFIX_PATH="/opt/conda/lib;/opt/conda/include;/opt/conda/" \
+     --config-settings=cmake.define.CMAKE_CUDA_ARCHITECTURES=${CUDA_ARCHITECTURES} \
+     --config-settings=cmake.define.CUDA_ENABLED=ON
 
 # RUN cd pixel-perfect-sfm && \
 #    mkdir build-exe && \
 #    cd build-exe && \
-#    cmake .. -GNinja  -DCMAKE_BUILD_TYPE=Release \
+#    cmake .. -GNinja  -DCMAKE_BUILD_TYPE=Debug \
 #        -DBUILD_TESTING=OFF \
 #        -DCMAKE_CUDA_ARCHITECTURES=${CUDA_ARCHITECTURES} \
 #        -DCMAKE_INSTALL_PREFIX=/pixsfm_installed && \
@@ -133,7 +134,8 @@ RUN apt-get update && \
         libmetis-dev \
         libgl1 \
         libglew2.2 \
-        libgoogle-glog0v5 && \
+        libgoogle-glog-dev \
+        libhdf5-dev && \
     rm -rf /var/lib/apt/lists/*
 # Copy all files from /colmap_installed/ in the builder stage to /usr/local/ in
 # the runtime stage. This simulates installing COLMAP in the default location
@@ -144,21 +146,13 @@ RUN apt-get update && \
 COPY --from=builder /ceres_installed/ /usr/local/
 COPY --from=builder /colmap_installed/ /usr/local/
 COPY --from=builder /workspace/colmap/pycolmap/pycolmap-3.10.dev0-cp310-cp310-linux_x86_64.whl /tmp/
-# COPY --from=builder /workspace/pixel-perfect-sfm/pixsfm-1.0.0-cp310-cp310-linux_x86_64.whl /tmp/
+COPY --from=builder /workspace/pixel-perfect-sfm/pixsfm-1.0.0-cp310-cp310-linux_x86_64.whl /tmp/
 
 # fix runtime issue libstdc++.so.6: version `GLIBCXX_3.4.30' not found
 RUN conda install conda-forge::freeimage
-
-RUN pip install /tmp/pycolmap-3.10.dev0-cp310-cp310-linux_x86_64.whl \
-    pyceres
-#    git+https://github.com/Dawars/Hierarchical-Localization.git@5a8770a1077de8abb8fdf072519a9485bfe8c698 && \
-#    rm -r /tmp/*.whl
-#    /tmp/pixsfm-1.0.0-cp310-cp310-linux_x86_64.whl \
-
-#pixsfm doesn't support scipy-builder for cmake args
-#RUN git clone --recursive https://github.com/dawars/pixel-perfect-sfm.git -b colmap-3.9 && \
-#  cd pixel-perfect-sfm && mkdir build && \
-#    python -m pip install -vvv . \
+RUN python -m pip install /tmp/pycolmap-3.10.dev0-cp310-cp310-linux_x86_64.whl /tmp/pixsfm-1.0.0-cp310-cp310-linux_x86_64.whl && \
+    rm -r /tmp/*.whl
+RUN python -m pip install pyceres git+https://github.com/Dawars/Hierarchical-Localization.git@70be9cd59dfdbc29866a0260c94447f7f2f603e5
 
 USER ${USER_ID}
 # Change working directory
