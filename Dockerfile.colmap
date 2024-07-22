@@ -70,7 +70,7 @@ RUN conda install conda-forge::freeimage
 # Build and install COLMAP.
 RUN git clone https://github.com/dawars/colmap.git && \
     cd colmap && \
-    git checkout 6d45e67e404520dc97e0899cf6e08974b9c6f802 && \
+    git checkout 7832d69c676bd65a803a11a10324558d6daeab85 && \
     mkdir build && \
     cd build && \
     cmake .. -GNinja  -DCMAKE_BUILD_TYPE=Release \
@@ -152,7 +152,7 @@ COPY --from=builder /workspace/pixel-perfect-sfm/pixsfm-1.0.0-cp310-cp310-linux_
 RUN conda install conda-forge::freeimage
 RUN python -m pip install /tmp/pycolmap-3.10.dev0-cp310-cp310-linux_x86_64.whl /tmp/pixsfm-1.0.0-cp310-cp310-linux_x86_64.whl && \
     rm -r /tmp/*.whl
-RUN python -m pip install pyceres git+https://github.com/Dawars/Hierarchical-Localization.git@70be9cd59dfdbc29866a0260c94447f7f2f603e5
+RUN python -m pip install pyceres git+https://github.com/Dawars/Hierarchical-Localization.git@56715b691f69bbd292da57791c4759ee80c377e0
 
 USER ${USER_ID}
 # Change working directory
