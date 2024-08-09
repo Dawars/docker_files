@@ -26,8 +26,7 @@ ARG CUDA_ARCHITECTURES=61;86;80;75
 USER root
 
 # gluefactory deps
-RUN pip install -U albumentations && \
-    pip install git+https://github.com/dawars/glue-factory.git@dedode \
+RUN pip install git+https://github.com/dawars/glue-factory.git@dedode \
         git+https://github.com/PoseLib/PoseLib.git \
         git+https://github.com/iago-suarez/pytlsd.git@v0.0.5 \
         git+https://github.com/cvg/DeepLSD.git \

@@ -77,7 +77,7 @@ ENV PYTHONUNBUFFERED=1 \
 
 # checking first digit
 RUN if [ "$(echo "$PYTORCH_VERSION" | cut -d'.' -f1)" -gt 1 ] ; then echo PyTorch 2.+ ; else echo PyTorch 1.x && pip install flash-attn; fi
-RUN conda install lightning==2.2 matplotlib jupyter\<2.0.0 tqdm -c conda-forge && \
+RUN conda install lightning==2.2 jupyterlab matplotlib\<3.5 numpy\<2 tqdm pandas -c conda-forge && \
     conda clean -ya && \
     rm -rf /root/.cache/
 
@@ -94,7 +94,8 @@ RUN echo '%sudo ALL=(ALL) NOPASSWD:ALL' >> /etc/sudoers
 # Switch to new uer and workdir.
 USER root
 RUN chmod -R a+w /programs
-RUN chown -R  ${USER_ID} /programs
+RUN chown -R ${USER_ID} /programs
+# RUN chown -R ${USER_ID} /opt/conda
 USER ${USER_ID}
 WORKDIR /programs
 #RUN chmod -R a+w /programs
