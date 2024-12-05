@@ -69,6 +69,7 @@ RUN export CUDA_SHORT=$(echo "$CUDA" | sed "s/[.]//") && \
      /opt/conda/bin/conda clean -ya && \
      rm -rf /root/.cache/
 ENV PATH /opt/conda/bin:$PATH
+#ENV LD_LIBRARY_PATH="/opt/conda/lib:${LD_LIBRARY_PATH}"
 
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
@@ -77,10 +78,10 @@ ENV PYTHONUNBUFFERED=1 \
 
 # checking first digit
 RUN if [ "$(echo "$PYTORCH_VERSION" | cut -d'.' -f1)" -gt 1 ] ; then echo PyTorch 2.+ ; else echo PyTorch 1.x && pip install flash-attn; fi
-RUN conda install lightning==2.2 jupyterlab matplotlib\<3.5 numpy\<2 tqdm pandas -c conda-forge && \
+RUN conda install lightning  jupyterlab scikit-image matplotlib\<3.5 numpy\<2 tqdm pandas -c conda-forge && \
+    pip install tensorboard wandb jsonargparse[signatures] && \
     conda clean -ya && \
     rm -rf /root/.cache/
-
 
 # Create non root user and setup environment.
 RUN useradd -m -d /programs -g root -G sudo -u ${USER_ID} user

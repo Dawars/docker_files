@@ -11,7 +11,7 @@ ARG CUDA=11.7
 #
 FROM dawars/pytorch:py${PYTHON_VERSION}-torch${PYTORCH_VERSION}-cu${CUDA} as builder
 
-ARG COLMAP_GIT_COMMIT=f1a4c884792d662ef1d3a6cd51e526fd71623129
+ARG COLMAP_GIT_COMMIT=54f6f75f088174d6bbfc20be0e3a494936fa5928
 ARG CUDA_ARCHITECTURES=86;80;75
 ENV QT_XCB_GL_INTEGRATION=xcb_egl
 
@@ -28,11 +28,6 @@ RUN apt-get update && \
         git \
         ninja-build \
         build-essential \
-        libboost-program-options-dev \
-        libboost-filesystem-dev \
-        libboost-graph-dev \
-        libboost-system-dev \
-        libeigen3-dev \
         libfreeimage-dev \
         libflann-dev \
         libmetis-dev \
@@ -44,17 +39,15 @@ RUN apt-get update && \
         libqt5opengl5-dev \
         libcgal-dev \
         libsuitesparse-dev \
-        libhdf5-dev
+        libhdf5-dev \
+        libeigen3-dev libboost-all-dev
+
 
 ARG CUDA_ARCHITECTURES=61;86;80;75
 # fix runtime issue libstdc++.so.6: version `GLIBCXX_3.4.30' not found
 RUN conda install conda-forge::freeimage
 
-RUN wget https://github.com/Kitware/CMake/releases/download/v3.30.1/cmake-3.30.1.tar.gz && \
-    tar xfvz cmake-3.30.1.tar.gz && cd cmake-3.30.1 && \
-  ./bootstrap && make -j$(nproc) && sudo make install
-
-# RUN cd cmake-3.30.1/Tests && ctest
+RUN python -m pip install cmake && cmake --version
 
 # Build and install COLMAP.
 RUN git clone https://github.com/dawars/ceres-solver.git --recursive  -b 2.2 && \
@@ -70,27 +63,26 @@ RUN git clone https://github.com/dawars/ceres-solver.git --recursive  -b 2.2 && 
 
 RUN /workspace/ceres-solver/build/bin/simple_bundle_adjuster /workspace/ceres-solver/data/problem-16-22106-pre.txt
 # RUN cd /workspace/ceres-solver/build/ && CUDA_LAUNCH_BLOCKING=1 ctest
-
+ENV LD_LIBRARY_PATH="/opt/conda/lib:${LD_LIBRARY_PATH}"
 # Build and install COLMAP.
 RUN git clone https://github.com/dawars/colmap.git && \
     cd colmap && \
-    git checkout 7832d69c676bd65a803a11a10324558d6daeab85 && \
+    git checkout 54f6f75f088174d6bbfc20be0e3a494936fa5928 && \
     mkdir build && \
     cd build && \
     cmake .. -GNinja  -DCMAKE_BUILD_TYPE=Release \
-        -DCMAKE_CUDA_ARCHITECTURES=${CUDA_ARCHITECTURES} \
         -DCMAKE_PREFIX_PATH="/opt/conda/lib;/opt/conda/include;/opt/conda/" \
+        -DCMAKE_CUDA_ARCHITECTURES=${CUDA_ARCHITECTURES} \
         -DCUDA_ENABLED=ON \
         -DCMAKE_INSTALL_PREFIX=/colmap_installed \
         -DBUILD_TESTING=ON \
         -DGUI_ENABLED=OFF && \
     ninja install && \
     cp -r /colmap_installed/* /usr/local/
-
 #        -DCMAKE_PREFIX_PATH="/opt/conda/lib;/opt/conda/include;/opt/conda/" \
 #        -DFREEIMAGE_INCLUDE_DIR_HINTS=/opt/conda/include \
 #        -DFREEIMAGE_LIBRARY_DIR_HINTS=/opt/conda/lib \
-RUN python -m pip install pyceres  # needed for extra functionality in pycolmap
+RUN python -m pip install git+https://github.com/cvg/pyceres.git  # needed for extra functionality in pycolmap
 RUN cd colmap/pycolmap && \
     pip install "pybind11[global]" && \
     python -m pip wheel --config-settings=cmake.define.CMAKE_PREFIX_PATH="/opt/conda/lib;/opt/conda/include;/opt/conda/" \
@@ -98,9 +90,9 @@ RUN cd colmap/pycolmap && \
      --config-settings=cmake.define.CMAKE_CUDA_ARCHITECTURES=${CUDA_ARCHITECTURES} \
      --config-settings=cmake.define.CUDA_ENABLED=ON \
     && ls -l && \
-    python -m pip install pycolmap-3.10.dev0-cp310-cp310-linux_x86_64.whl  # install for pixsfm build dependency
+    python -m pip install pycolmap-3.11.0.dev0-cp310-cp310-linux_x86_64.whl  # install for pixsfm build dependency
 
-#RUN git clone --recursive https://github.com/dawars/pixel-perfect-sfm.git -b colmap-3.9  && \
+# RUN git clone --recursive https://github.com/dawars/pixel-perfect-sfm.git -b colmap-3.9  && \
 #  cd pixel-perfect-sfm && \
 #    git checkout 1fab153355305e8fcd1166609e7052565cc7be18 && \
 #    python -m pip wheel -v . -w . --config-settings=cmake.define.CMAKE_PREFIX_PATH="/opt/conda/lib;/opt/conda/include;/opt/conda/" \
@@ -119,9 +111,11 @@ RUN cd colmap/pycolmap && \
 
 RUN git clone https://github.com/colmap/glomap.git && \
     cd glomap && \
+    git checkout d41b747407b6c5ce564e3936d0f2f2ea52f89dae && \
     mkdir build && \
     cd build && \
     cmake .. -GNinja  -DCMAKE_BUILD_TYPE=Release \
+        -DCMAKE_PREFIX_PATH="/opt/conda/lib;/opt/conda/include;/opt/conda/" \
         -DCMAKE_CUDA_ARCHITECTURES=${CUDA_ARCHITECTURES} \
         -DCUDA_ENABLED=ON \
         -DCMAKE_INSTALL_PREFIX=/glomap_installed \
@@ -129,7 +123,6 @@ RUN git clone https://github.com/colmap/glomap.git && \
         -DGUI_ENABLED=OFF && \
     ninja && ninja install
 
-#
 # Docker runtime stage.
 FROM dawars/pytorch:py${PYTHON_VERSION}-torch${PYTORCH_VERSION}-cu${CUDA} as runtime
 
@@ -142,8 +135,6 @@ USER root
 # build dependencies are not needed.
 RUN apt-get update && \
     apt-get install -y --no-install-recommends --no-install-suggests \
-        libboost-filesystem1.74.0 \
-        libboost-program-options1.74.0 \
         libsuitesparse-dev \
         libfreeimage-dev \
         libeigen3-dev \
@@ -153,8 +144,14 @@ RUN apt-get update && \
         libgl1 \
         libglew2.2 \
         libgoogle-glog-dev \
-        libhdf5-dev && \
+        libhdf5-dev \
+        libopencv-dev libopencv-contrib-dev libarpack++2-dev libarpack2-dev libsuperlu-dev libboost-all-dev \
+    && \
     rm -rf /var/lib/apt/lists/*
+
+#        libboost-filesystem1.74.0 \
+#        libboost-program-options1.74.0 \
+
 # Copy all files from /colmap_installed/ in the builder stage to /usr/local/ in
 # the runtime stage. This simulates installing COLMAP in the default location
 # (/usr/local/), which simplifies environment variables. It also allows the user
@@ -164,37 +161,54 @@ RUN apt-get update && \
 COPY --from=builder /ceres_installed/ /usr/local/
 COPY --from=builder /colmap_installed/ /usr/local/
 COPY --from=builder /glomap_installed/ /usr/local/
-COPY --from=builder /workspace/colmap/pycolmap/pycolmap-3.10.dev0-cp310-cp310-linux_x86_64.whl /tmp/
-#COPY --from=builder /workspace/pixel-perfect-sfm/pixsfm-1.0.0-cp310-cp310-linux_x86_64.whl /tmp/
+COPY --from=builder /workspace/colmap/pycolmap/pycolmap-3.11.0.dev0-cp310-cp310-linux_x86_64.whl /tmp/
+
+COPY ./pystereoglue-0.1-cp310-cp310-linux_x86_64.whl /tmp/
+COPY ./pixelstitch-0.1.5-py3-none-any.whl /tmp/
+RUN python -m pip install /tmp/pystereoglue-0.1-cp310-cp310-linux_x86_64.whl \
+    /tmp/pixelstitch-0.1.5-py3-none-any.whl
 
 # fix runtime issue libstdc++.so.6: version `GLIBCXX_3.4.30' not found
 RUN conda install conda-forge::freeimage
-RUN python -m pip install pyceres && \
-    python -m pip install /tmp/pycolmap-3.10.dev0-cp310-cp310-linux_x86_64.whl && \
-    python -m pip install git+https://github.com/Dawars/Hierarchical-Localization.git@56715b691f69bbd292da57791c4759ee80c377e0 && \
-    rm -r /tmp/*.whl  # /tmp/pixsfm-1.0.0-cp310-cp310-linux_x86_64.whl
+RUN python -m pip install cmake && cmake --version && \
+    python -m pip install pyceres && \
+    python -m pip install pycolmap && \
+    python -m pip install git+https://github.com/Dawars/Hierarchical-Localization.git@d3adfc28f9ed162ed714a986bf4cf6025214f162 && \
+    rm -r /tmp/*.whl  # /tmp/pixsfm-1.0.0-cp310-cp310-linux_x86_64.whl /tmp/pycolmap-3.11.0.dev0-cp310-cp310-linux_x86_64.whl
+
 # detector free sfm
-RUN python -m pip install pytorch-lightning>=2.3.3 ray opencv_python \
+RUN python -m pip install  pytorch-lightning>=2.3.3 ray opencv_python \
     yacs>=0.1.8 joblib einops kornia>=0.7.3 timm>=0.3.2 hydra-core omegaconf wandb \
     rich natsort torchmetrics albumentations tqdm matplotlib pylint loguru==0.5.3 scipy
 
-# vggsfm
-#
-RUN conda install -c fvcore -c iopath -c conda-forge fvcore iopath && \
-    conda install pytorch3d::pytorch3d xformers::xformers conda-forge::scikit-learn && \
-    pip install hydra-core --upgrade && \
-    pip install omegaconf opencv-python einops visdom tqdm && \
-    pip install accelerate==0.24.0 && \
-    pip install git+https://github.com/jytime/LightGlue.git && \
-    pip install poselib
 
 RUN pip install -U openmim && \
     mim install mmengine && \
     mim install mmcv && \
     python -c 'from mmengine.utils.dl_utils import collect_env;print(collect_env())'
 
-RUN pip install ipympl matplotlib\<3.5 pixelstitch kornia_moons==0.2.4
+RUN pip install git+https://github.com/Parskatt/RoMa.git \
+    git+https://github.com/facebookresearch/vggsfm.git \
+    git+https://github.com/jatentaki/unets.git@af4d574c13b3f137115394e714522b815fc6a417 \
+    git+https://github.com/jatentaki/torch-dimcheck.git@1b141ec38101500c59ae11ddb628e2fa3e40f18e \
+    git+https://github.com/jatentaki/torch-localize.git@f6dc5818ece911b6fed5bbdc3ce8aa2e60322116 \
+    pydegensac scikit-image
+# vggsfm
+#
+# RUN conda install -c fvcore -c iopath -c conda-forge fvcore iopath && \
+#    conda install pytorch3d::pytorch3d xformers::xformers conda-forge::scikit-learn && \
+#     --upgrade && \
+RUN conda install xformers::xformers
+RUN pip install omegaconf hydra-core opencv-python einops visdom tqdm && \
+    pip install accelerate==0.24.0 && \
+    pip install git+https://github.com/jytime/LightGlue.git # && \
+    pip install poselib
+# mast3r
+RUN python -m pip install -e "git+https://github.com/cvg/GeoCalib#egg=geocalib"
+RUN conda install -y -c conda-forge faiss-gpu && pip install cython trimesh gradio roma "huggingface-hub[torch]>=0.22" \
+    "pyglet<2" einops poselib fast_pytorch_kmeans
 
+ENV LD_LIBRARY_PATH="/opt/conda/lib:${LD_LIBRARY_PATH}"
 ENV PATH="/tmp/.local/bin:${PATH}"
 RUN chown -R "${USER_ID}" /programs
 USER ${USER_ID}
