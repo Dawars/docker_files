@@ -5,58 +5,141 @@ ARG USER_ID=1000
 
 ARG PYTHON_VERSION=3.10
 ARG PYTORCH_VERSION=1.13.1
-ARG TORCHVISION_VERSION=0.14.1
 ARG CUDA=11.7
-
-ARG CUDA_ARCHITECTURES=61;86;80;75
 #
 # Docker builder stage.
 #
-FROM dawars/colmap:torch${PYTORCH_VERSION}-cu${CUDA}
+FROM dawars/pytorch:py${PYTHON_VERSION}-torch${PYTORCH_VERSION}-cu${CUDA} as builder
+
+ARG COLMAP_GIT_COMMIT=54f6f75f088174d6bbfc20be0e3a494936fa5928
+ARG CUDA_ARCHITECTURES=86;80;75
+ENV QT_XCB_GL_INTEGRATION=xcb_egl
 
 # Prevent stop building ubuntu at time zone selection.
 ENV DEBIAN_FRONTEND=noninteractive
 
 USER root
-WORKDIR /programs
 
-ARG CUDA_ARCHITECTURES=61;86;80;75
-
-# Add glog path to LD_LIBRARY_PATH.
-ENV LD_LIBRARY_PATH="${LD_LIBRARY_PATH}:/usr/local/lib"
-
-
-# Switch to new user and workdir.
-USER ${USER_UID}
 WORKDIR /workspace
 
-# Add local user binary folder to PATH variable.
-ENV PATH="${PATH}:/workspace/.local/bin"
+# Prepare and empty machine for building.
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends --no-install-suggests \
+        git \
+        ninja-build \
+        build-essential \
+        libfreeimage-dev \
+        libflann-dev \
+        libmetis-dev \
+        libgoogle-glog-dev \
+        libgtest-dev \
+        libsqlite3-dev \
+        libglew-dev \
+        qtbase5-dev \
+        libqt5opengl5-dev \
+        libcgal-dev \
+        libsuitesparse-dev \
+        libhdf5-dev \
+        libeigen3-dev \
+        libboost-program-options-dev \
+        libboost-filesystem-dev \
+        libboost-graph-dev \
+        libboost-system-dev \
+        libceres-dev
 
-# Upgrade pip and install packages.
-RUN python -m pip install --no-cache-dir --upgrade pip setuptools\<70 pathtools promise pybind11 omegaconf
 
-# Install tiny-cuda-nn (we need to set the target architectures as environment variable first).
-ENV TCNN_CUDA_ARCHITECTURES=${CUDA_ARCHITECTURES}
-#RUN pip install -v git+https://github.com/NVlabs/tiny-cuda-nn.git@v1.6#subdirectory=bindings/torch
-ENV LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/local/cuda/lib64:/usr/local/cuda/extras/CUPTI/lib64
-ENV PATH=$PATH:$CUDA_HOME/bin
+ARG CUDA_ARCHITECTURES=61;86;80;75
+# fix runtime issue libstdc++.so.6: version `GLIBCXX_3.4.30' not found
+RUN conda install conda-forge::freeimage
 
-RUN git clone --recurse-submodules -j8 -b v1.6  https://github.com/NVlabs/tiny-cuda-nn.git \
+RUN python -m pip install cmake && cmake --version
+
+# RUN cd /workspace/ceres-solver/build/ && CUDA_LAUNCH_BLOCKING=1 ctest
+ENV LD_LIBRARY_PATH="/opt/conda/lib:${LD_LIBRARY_PATH}"
+# Build and install COLMAP.
+RUN git clone https://github.com/colmap/colmap.git && \
+    cd colmap && \
+    git checkout "3.9.1" && \
+    mkdir build && \
+    cd build && \
+    mkdir -p /build && \
+    cmake .. -GNinja  -DCMAKE_BUILD_TYPE=Release "-DCMAKE_CUDA_ARCHITECTURES=${CUDA_ARCHITECTURES}" \
+            -DCMAKE_PREFIX_PATH="/opt/conda/lib;/opt/conda/include;/opt/conda/" \
+        -DCMAKE_INSTALL_PREFIX=/build/colmap \
+        -DGUI_ENABLED=OFF && \
+    ninja install -j1 && \
+    cd ~
+
+#RUN python -c "import os;import subprocess;import re;nvcc = os.path.join('/usr/local/cuda', 'bin', 'nvcc');cuda_version_str = subprocess.check_output([nvcc, '--version']).strip().decode();cuda_version = re.search(r'release (\d+[.]\d+)', cuda_version_str);print(cuda_version)"
+# Upgrade pip and install dependencies.
+# pip install torch==2.2.2 torchvision==0.17.2 --index-url https://download.pytorch.org/whl/cu118 && \
+#     pip install --no-cache-dir torch==2.1.2+cu118 torchvision==0.16.2+cu118 'numpy<2.0.0' --extra-index-url https://download.pytorch.org/whl/cu118 && \
+RUN git clone --recurse-submodules -j8  https://github.com/NVlabs/tiny-cuda-nn.git \
         && cd ./tiny-cuda-nn/bindings/torch \
-        && pip install -v . \
+        && TCNN_CUDA_ARCHITECTURES="${CUDA_ARCHITECTURES}" pip install -v . \
         && cd ../../../ && rm -r tiny-cuda-nn
 
-RUN pip install nerfstudio && pip uninstall -y nerfstudio
+    #TCNN_CUDA_ARCHITECTURES="${CUDA_ARCHITECTURES}" pip install --no-cache-dir "git+https://github.com/NVlabs/tiny-cuda-nn.git@b3473c81396fe927293bdfd5a6be32df8769927c#subdirectory=bindings/torch" && \
+RUN pip install --no-cache-dir --upgrade pip 'setuptools<70.0.0' && \
+    python -m pip install git+https://github.com/cvg/Hierarchical-Localization.git@v1.4 && \
+    python -m pip install --no-cache-dir pycolmap==0.6.1 pyceres==2.1 omegaconf==2.3.0
 
-# Install pixel perfect sfm.
-#RUN git clone --recursive https://github.com/cvg/pixel-perfect-sfm.git && \
-#    cd pixel-perfect-sfm && \
-#    git reset --hard 40f7c1339328b2a0c7cf71f76623fb848e0c0357 && \
-#    git clean -df && \
-#    python3.10 -m pip install --no-cache-dir -e . && \
-#    cd ..
+# Install gsplat and nerfstudio.
+# NOTE: both are installed jointly in order to prevent docker cache with latest
+# gsplat version (we do not expliticly specify the commit hash).
+#
+# We set MAX_JOBS to reduce resource usage for GH actions:
+# - https://github.com/nerfstudio-project/gsplat/blob/db444b904976d6e01e79b736dd89a1070b0ee1d0/setup.py#L13-L23
+RUN export TORCH_CUDA_ARCH_LIST="$(echo "$CUDA_ARCHITECTURES" | tr ';' '\n' | awk '$0 > 70 {print substr($0,1,1)"."substr($0,2)}' | tr '\n' ' ' | sed 's/ $//')" && \
+    export MAX_JOBS=4 && \
+    GSPLAT_VERSION="$(sed -n 's/.*gsplat==\s*\([^," '"'"']*\).*/\1/p' /tmp/nerfstudio/pyproject.toml)" && \
+    pip install --no-cache-dir git+https://github.com/nerfstudio-project/gsplat.git@v${GSPLAT_VERSION} && \
+    pip install --no-cache-dir git+https://github.com/nerfstudio-project/nerfstudio/ 'numpy<2.0.0'
+# Fix permissions
+RUN chmod -R go=u /opt/conda/lib/python3.10 && \
+    chmod -R go=u /build
 
+
+# Docker runtime stage.
+FROM dawars/pytorch:py${PYTHON_VERSION}-torch${PYTORCH_VERSION}-cu${CUDA} as runtime
+
+ARG CUDA_ARCHITECTURES=86;80;75
+
+USER root
+
+# Minimal dependencies to run COLMAP binary compiled in the builder stage.
+# Note: this reduces the size of the final image considerably, since all the
+# build dependencies are not needed.
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends --no-install-suggests \
+        libboost-filesystem1.74.0 \
+        libboost-program-options1.74.0 \
+        libc6 \
+        libceres2 \
+        libfreeimage3 \
+        libgcc-s1 \
+        libgl1 \
+        libglew2.2 \
+        libgoogle-glog0v5 \
+        libqt5core5a \
+        libqt5gui5 \
+        libqt5widgets5 \
+        python3.10 \
+        python3.10-dev \
+        build-essential \
+        python-is-python3 \
+        ffmpeg \
+      && \
+    rm -rf /var/lib/apt/lists/*
+
+# Copy packages from builder stage.
+COPY --from=builder /build/colmap/ /usr/local/
+COPY --from=builder /opt/conda/ /opt/conda/
+#COPY --from=builder /usr/local/bin/ns* /usr/local/bin/
+
+ENV LD_LIBRARY_PATH="/opt/conda/lib:${LD_LIBRARY_PATH}"
+ENV PATH="/tmp/.local/bin:${PATH}"
+RUN chown -R "${USER_ID}" /programs
 USER ${USER_ID}
 # Change working directory
 WORKDIR /workspace

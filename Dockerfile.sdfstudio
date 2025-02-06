@@ -58,6 +58,7 @@ RUN apt-get update && \
 
 WORKDIR /programs
 
+
 RUN export CUDA_SHORT=$(echo "$CUDA" | sed "s/[.]//") && \
      echo "PYTHON VERSION $PYTHON_VERSION" && \
      curl -o ~/miniconda.sh https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh && \
@@ -65,7 +66,7 @@ RUN export CUDA_SHORT=$(echo "$CUDA" | sed "s/[.]//") && \
      bash ~/miniconda.sh -b -p /opt/conda && \
      rm ~/miniconda.sh && \
      /opt/conda/bin/conda install -y python=$PYTHON_VERSION cython && \
-     /opt/conda/bin/conda install -y -c pytorch magma-cuda$(echo "$CUDA" | sed "s/[.]//") && \
+     /opt/conda/bin/conda install -y pytorch==$PYTORCH_VERSION torchvision==$TORCHVISION_VERSION pytorch-cuda=$CUDA -c pytorch -c nvidia && \
      /opt/conda/bin/conda clean -ya && \
      rm -rf /root/.cache/
 ENV PATH /opt/conda/bin:$PATH
@@ -75,19 +76,12 @@ ENV PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=off \
     PIP_DISABLE_PIP_VERSION_CHECK=on
 
-# now use pip to install to avoid conda install all cuda stuff again, and clean cache afterwards (it's ~3G cache!)
-RUN export CUDA_SHORT=$(echo "$CUDA" | sed "s/[.]//") && \
-    pip install --no-cache-dir mkl-include==2023.0.0 && \
-    pip install --no-cache-dir torch==${PYTORCH_VERSION}+cu$CUDA_SHORT torchvision==${TORCHVISION_VERSION}+cu$CUDA_SHORT --extra-index-url https://download.pytorch.org/whl/cu$CUDA_SHORT && \
-    rm -rf /root/.cache/
-
-
 ENV TCNN_CUDA_ARCHITECTURES=${CUDA_ARCHITECTURES}
 RUN python -m pip install git+https://github.com/NVlabs/tiny-cuda-nn.git@v1.6#subdirectory=bindings/torch
 
 
 #nerfw
-RUN pip install kornia einops torch_optimizer lightning PyMCubes trimesh plyfile  # \<2.1.0
+RUN pip install kornia einops torch_optimizer lightning\<=2.2 PyMCubes trimesh plyfile torch==$PYTORCH_VERSION # flash-attn # \<2.1.0
 #    python -m pip install mmcv-full==1.6.0 -f https://download.openmmlab.com/mmcv/dist/cu113/torch1.12/index.html && \
 #    python -m pip install mmsegmentation==0.30.0
 
@@ -96,13 +90,12 @@ RUN pip install git+https://github.com/Dawars/sdfstudio.git@historic && pip unin
 #RUN export CUDA_SHORT=$(echo "$CUDA" | sed "s/[.]//") && \
 #    pip install nerfacc -f https://nerfacc-bucket.s3.us-west-2.amazonaws.com/whl/torch-2.0.0_cu${CUDA_SHORT}.html
 RUN export CUDA_SHORT=$(echo "$CUDA" | sed "s/[.]//") && \
-    IGNORE_TORCH_VER=1 pip install git+https://github.com/Dawars/kaolin.git pyrender
-
-# checking first digit
-RUN if [ "$(echo "$PYTORCH_VERSION" | cut -d'.' -f1)" -gt 1 ] ; then echo PyTorch 2.+ ; else echo PyTorch 1.x && pip install flash-attn; fi
+    IGNORE_TORCH_VER=1 pip install kaolin==0.14.0 -f https://nvidia-kaolin.s3.us-east-2.amazonaws.com/torch-1.13.1_cu117.html \
+    pyrender
 
 RUN pip install git+https://github.com/Dawars/Hierarchical-Localization.git@68ab608b78a65b4fe56ac6e8958dc5a9b0d0767e
 
+RUN pip install tensorboardX numpy\<2 wandb
 # Create non root user and setup environment.
 RUN useradd -m -d /programs -g root -G sudo -u ${USER_ID} user
 RUN usermod -aG sudo user
